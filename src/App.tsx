@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import { MergedSegment, Segment } from "./App.types";
 
@@ -16,8 +16,46 @@ function App() {
   const [selectedMerged, setSelectedMerged] = useState<number[]>([]);
   const [selectedUnmerged, setSelectedUnmerged] = useState<number[]>([]);
 
+  const [isSelectMergeMode, setSelectMergeMode] = useState(false);
+  const [mergeHightlights, setMergeHightlights] = useState<number[]>([]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const { key, shiftKey } = e;
+
+      if (!["j", "k"].includes(key.toLocaleLowerCase())) return;
+
+      const modifier =
+        (key.toLocaleLowerCase() === "j" && !shiftKey) ||
+        (key.toLocaleLowerCase() === "k" && shiftKey)
+          ? 1
+          : -1;
+
+      const elementList = document.querySelectorAll(
+        '[aab-shortcut="jk"]:not([disabled])'
+      );
+
+      let idx = 0;
+
+      for (let i = 0; i < elementList.length; i++) {
+        if (elementList[i] === document.activeElement) {
+          idx = i + modifier;
+        }
+      }
+
+      if (idx < 0) idx = elementList.length - 1;
+      else if (idx > elementList.length - 1) idx = 0;
+
+      (elementList[idx] as HTMLElement).focus();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   const processFile = async (newFile: File) => {
-    console.log(newFile);
     try {
       if (newFile.type.toLocaleLowerCase() !== "application/json") {
         throw new Error("not json");
@@ -97,21 +135,21 @@ function App() {
     }
   };
 
-  const handleMerge = () => {
+  const handleMerge = (mergedList: number[]) => {
     const _mergeds = [...mergeds];
 
     let isAdjust = false;
     let diff = 0;
+    let firstCallDiff = true;
 
     const mergedLength = _mergeds.reduce(
-      (total, curr) =>
-        total + (selectedMerged.includes(curr.mergedIndex) ? 1 : 0),
+      (total, curr) => total + (mergedList.includes(curr.mergedIndex) ? 1 : 0),
       0
     );
 
     _mergeds.forEach((merged, idx) => {
-      if (selectedMerged.includes(merged.mergedIndex)) {
-        if (idx > 0 && selectedMerged.includes(_mergeds[idx - 1].mergedIndex)) {
+      if (mergedList.includes(merged.mergedIndex)) {
+        if (idx > 0 && mergedList.includes(_mergeds[idx - 1].mergedIndex)) {
           merged.indexOnMerged = _mergeds[idx - 1].indexOnMerged + 1;
           merged.mergedIndex = _mergeds[idx - 1].mergedIndex;
         } else {
@@ -121,8 +159,12 @@ function App() {
         isAdjust = true;
         merged.mergedLength = mergedLength;
       } else if (isAdjust) {
-        if (selectedMerged.includes(_mergeds[idx - 1].mergedIndex)) {
+        if (
+          mergedList.includes(_mergeds[idx - 1].mergedIndex) &&
+          firstCallDiff
+        ) {
           diff = merged.mergedIndex - _mergeds[idx - 1].mergedIndex - 1;
+          firstCallDiff = false;
         }
 
         merged.mergedIndex = merged.mergedIndex - diff;
@@ -131,6 +173,7 @@ function App() {
 
     setMergeds(_mergeds);
     setSelectedMerged([]);
+    setMergeHightlights([]);
   };
 
   const handleSelectUnmerged = (idx: number, group: MergedSegment[]) => {
@@ -199,21 +242,32 @@ function App() {
     }
   };
 
-  const handleUnmerge = () => {
+  const handleUnmerge = (unmergedList: number[], mergedIndex: number) => {
     const _mergeds = [...mergeds];
 
     let isAdjust = false;
     let diff = 0;
+    let firstCallDiff = true;
 
     _mergeds.forEach((item, idx) => {
-      if (selectedUnmerged.includes(item.originalIndex)) {
+      if (
+        item.mergedIndex === mergedIndex &&
+        !unmergedList.includes(item.originalIndex)
+      ) {
+        item.mergedLength = item.mergedLength - unmergedList.length;
+      }
+      if (unmergedList.includes(item.originalIndex)) {
         item.indexOnMerged = 0;
         item.mergedIndex = idx === 0 ? 0 : mergeds[idx - 1].mergedIndex + 1;
         item.mergedLength = 1;
         isAdjust = true;
       } else if (isAdjust) {
-        if (selectedUnmerged.includes(_mergeds[idx - 1].originalIndex)) {
+        if (
+          unmergedList.includes(_mergeds[idx - 1].originalIndex) &&
+          firstCallDiff
+        ) {
           diff = item.mergedIndex - _mergeds[idx - 1].mergedIndex - 1;
+          firstCallDiff = false;
         }
 
         item.mergedIndex = item.mergedIndex - diff;
@@ -258,6 +312,17 @@ function App() {
     link.click();
   };
 
+  const handleHightlight = (originalIdx: number) => {
+    let idx = originalIdx;
+    const mergeHightlights: number[] = [mergeds[idx].mergedIndex];
+    while (idx > 0) {
+      idx -= 1;
+      if (mergeds[idx].mergedLength > 1 && mergeHightlights.length > 1) break;
+      mergeHightlights.push(mergeds[idx].mergedIndex);
+    }
+    setMergeHightlights(mergeHightlights);
+  };
+
   return (
     <>
       <h1>Aab Subtitle Editor</h1>
@@ -280,7 +345,7 @@ function App() {
       <div className="relative overflow-x-auto shadow-md sm:rounded-lg">
         <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
           <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-            <tr>
+            <tr className="h-12">
               <th scope="col" className="px-6 py-3">
                 Original
               </th>
@@ -288,20 +353,30 @@ function App() {
                 Merged
               </th>
               <th>
-                <button
-                  onClick={() => handleMerge()}
-                  disabled={!selectedMerged.length}
-                  className="disabled:cursor-not-allowed disabled:hover:border-transparent"
-                >
-                  merge
-                </button>
+                <div className="flex justify-center gap-2">
+                  <button onClick={() => setSelectMergeMode((prev) => !prev)}>
+                    toggle merge
+                  </button>
+                  {isSelectMergeMode && (
+                    <button
+                      onClick={() => handleMerge(selectedMerged)}
+                      disabled={!selectedMerged.length}
+                      className="disabled:cursor-not-allowed disabled:hover:border-transparent disabled:bg-gray-400 disabled:text-gray-500"
+                    >
+                      merge
+                    </button>
+                  )}
+                </div>
               </th>
             </tr>
           </thead>
           <tbody>
             {mergeds.map((item, idx) => (
               <tr
-                className="bg-white border-b dark:bg-gray-800 dark:border-gray-700"
+                className={`bg-white border-b dark:bg-gray-800 dark:border-gray-700 ${
+                  mergeHightlights.includes(item.mergedIndex) &&
+                  "bg-gray-200 dark:bg-gray-600"
+                }`}
                 key={idx}
               >
                 <td
@@ -325,6 +400,7 @@ function App() {
                   ) : (
                     item.text
                   )}
+                  {item.mergedIndex}
                 </td>
                 {item.indexOnMerged === 0 && (
                   <>
@@ -365,6 +441,7 @@ function App() {
                                 setSelectedUnmerged([]);
                                 setUnmergedIndex(-1);
                               }}
+                              className="text-xs"
                             >
                               cancel
                             </button>
@@ -378,6 +455,7 @@ function App() {
                                   );
                                 else setSelectedUnmerged([]);
                               }}
+                              className="text-xs"
                             >
                               {selectedUnmerged.length < item.mergedLength
                                 ? "select"
@@ -385,9 +463,14 @@ function App() {
                               all
                             </button>
                             <button
-                              onClick={() => handleUnmerge()}
+                              onClick={() =>
+                                handleUnmerge(
+                                  selectedUnmerged,
+                                  item.mergedIndex
+                                )
+                              }
                               disabled={!selectedUnmerged.length}
-                              className="disabled:cursor-not-allowed disabled:hover:border-transparent"
+                              className="disabled:cursor-not-allowed disabled:hover:border-transparent disabled:bg-gray-400 disabled:text-gray-500 text-xs"
                             >
                               unmerge
                             </button>
@@ -404,15 +487,50 @@ function App() {
                       className="px-6 py-4"
                       rowSpan={mergeds[idx].mergedLength}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedMerged.includes(
-                          mergeds[idx].mergedIndex
+                      <div className="flex flex-col justify-center items-center gap-2">
+                        {isSelectMergeMode ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedMerged.includes(
+                              mergeds[idx].mergedIndex
+                            )}
+                            onChange={() =>
+                              handleSelectMerged(mergeds[idx].mergedIndex)
+                            }
+                          />
+                        ) : (
+                          <button
+                            aab-shortcut="jk"
+                            onMouseEnter={() =>
+                              handleHightlight(item.originalIndex)
+                            }
+                            onMouseLeave={() => setMergeHightlights([])}
+                            onFocus={() => handleHightlight(item.originalIndex)}
+                            onBlur={() => setMergeHightlights([])}
+                            disabled={idx == 0}
+                            className="disabled:cursor-not-allowed disabled:hover:border-transparent disabled:bg-gray-400 disabled:text-gray-500 text-xs"
+                            onClick={() => handleMerge(mergeHightlights)}
+                          >
+                            merge with above
+                          </button>
                         )}
-                        onChange={() =>
-                          handleSelectMerged(mergeds[idx].mergedIndex)
-                        }
-                      />
+                        {item.mergedLength > 1 && (
+                          <button
+                            aab-shortcut="jk"
+                            className="text-xs"
+                            onClick={() =>
+                              handleUnmerge(
+                                mergeds
+                                  .slice(idx, idx + item.mergedLength)
+                                  .map((g) => g.originalIndex),
+                                item.mergedIndex
+                              )
+                            }
+                          >
+                            unmerge
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </>
                 )}
@@ -425,7 +543,7 @@ function App() {
         <button
           onClick={() => handleExportSrt()}
           disabled={!mergeds.length}
-          className="disabled:cursor-not-allowed disabled:hover:border-transparent"
+          className="disabled:cursor-not-allowed disabled:hover:border-transparent disabled:bg-gray-400 disabled:text-gray-500"
         >
           export to srt
         </button>
