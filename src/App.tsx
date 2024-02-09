@@ -1,9 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { MergedSegment, Segment } from "./App.types";
+import {
+  ArrowPathRoundedSquareIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
+  TrashIcon,
+} from "@heroicons/react/24/solid";
+import _ from "lodash";
 
 function App() {
-  const [histories, setHistories] = useState([]);
+  const [histories, setHistories] = useState<{ mergeds: MergedSegment[] }[]>(
+    []
+  );
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const preventHistory = useRef(true);
 
   const [errMsg, setErrMsg] = useState<string[]>([]);
 
@@ -54,6 +65,17 @@ function App() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  useEffect(() => {
+    if (!preventHistory.current) {
+      setHistories((prev) => [
+        ...prev.slice(0, historyIndex + 1),
+        { mergeds: _.cloneDeep(mergeds) },
+      ]);
+      setHistoryIndex((prev) => prev + 1);
+    }
+    preventHistory.current = false;
+  }, [mergeds]);
 
   const processFile = async (newFile: File) => {
     try {
@@ -342,9 +364,77 @@ function App() {
           }}
         />
       </div>
+      {!!histories.length && (
+        <div className="flex my-4 justify-center gap-8">
+          <ArrowUturnLeftIcon
+            className={`h-6 w-6 ${
+              historyIndex > 0
+                ? "text-white cursor-pointer"
+                : "text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (historyIndex < 1) return;
+              preventHistory.current = true;
+              const hIdx = historyIndex - 1;
+              setHistoryIndex(hIdx);
+              setMergeds(_.cloneDeep(histories[hIdx].mergeds));
+            }}
+          />
+          <ArrowUturnRightIcon
+            className={`h-6 w-6 ${
+              historyIndex < histories.length - 1
+                ? "text-white cursor-pointer"
+                : "text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (historyIndex > histories.length - 2) return;
+              preventHistory.current = true;
+              const hIdx = historyIndex + 1;
+              setHistoryIndex(hIdx);
+              setMergeds(_.cloneDeep(histories[hIdx].mergeds));
+            }}
+          />
+          <ArrowPathRoundedSquareIcon
+            className={`h-6 w-6 ${
+              histories.length > 0
+                ? "text-white cursor-pointer"
+                : "text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (histories.length < 1) return;
+              preventHistory.current = true;
+              setHistoryIndex(0);
+              const _mergeds: MergedSegment[] = originals.map((o, idx) => ({
+                ...o,
+                mergedIndex: idx,
+                indexOnMerged: 0,
+                mergedLength: 1,
+                originalIndex: idx,
+              }));
+              setHistories([{ mergeds: _.cloneDeep(_mergeds) }]);
+              setMergeds(_.cloneDeep(_mergeds));
+            }}
+          />
+          <TrashIcon
+            className={`h-6 w-6 ${
+              histories.length > 0
+                ? "text-white cursor-pointer"
+                : "text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (histories.length < 1) return;
+              preventHistory.current = true;
+              setHistoryIndex(-1);
+              setHistories([]);
+              setMergeds([]);
+              setOriginals([]);
+            }}
+          />
+        </div>
+      )}
       <div className="relative overflow-x-auto shadow-md sm:rounded-lg">
         <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
-          <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+          <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 select-none">
             <tr className="h-12">
               <th scope="col" className="px-6 py-3">
                 Original
