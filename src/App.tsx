@@ -339,8 +339,9 @@ function App() {
     const mergeHightlights: number[] = [mergeds[idx].mergedIndex];
     while (idx > 0) {
       idx -= 1;
-      if (mergeds[idx].mergedLength > 1 && mergeHightlights.length > 1) break;
+      // if (mergeds[idx].mergedLength > 1 && mergeHightlights.length > 1) break; // legacy logic
       mergeHightlights.push(mergeds[idx].mergedIndex);
+      break;
     }
     setMergeHightlights(mergeHightlights);
   };
@@ -433,8 +434,8 @@ function App() {
         </div>
       )}
       <div className="relative overflow-x-auto shadow-md sm:rounded-lg">
-        <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
-          <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 select-none">
+        <table className="w-full text-sm text-left rtl:text-right text-gray-400">
+          <thead className="text-xs uppercase bg-gray-700 text-gray-400 select-none">
             <tr className="h-12">
               <th scope="col" className="px-6 py-3">
                 Original
@@ -463,9 +464,10 @@ function App() {
           <tbody>
             {mergeds.map((item, idx) => (
               <tr
-                className={`bg-white border-b dark:bg-gray-800 dark:border-gray-700 ${
-                  mergeHightlights.includes(item.mergedIndex) &&
-                  "bg-gray-200 dark:bg-gray-600"
+                className={`border-b  border-gray-700 ${
+                  mergeHightlights.includes(item.mergedIndex)
+                    ? "bg-gray-600"
+                    : "bg-gray-800"
                 }`}
                 key={idx}
               >
@@ -490,7 +492,6 @@ function App() {
                   ) : (
                     item.text
                   )}
-                  {item.mergedIndex}
                 </td>
                 {item.indexOnMerged === 0 && (
                   <>
