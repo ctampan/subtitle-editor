@@ -10,3 +10,7 @@ export type MergedSegment = Segment & {
   mergedLength: number;
   originalIndex: number;
 };
+
+export type TimelineSegment = Segment & {
+  isJump: boolean;
+};
